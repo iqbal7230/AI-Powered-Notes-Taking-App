@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 import base64
 from io import BytesIO
-from app.calculate.utils import analyze_image
-from myenv.schema import ImageData
+from apps.calculate.utils import analyze_image
+from schema import ImageData
 from PIL import Image
 
 router = APIRouter()

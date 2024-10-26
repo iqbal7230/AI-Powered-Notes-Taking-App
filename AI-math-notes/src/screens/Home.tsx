@@ -146,9 +146,10 @@ export default function Home() {
         const canvas = canvasRef.current;
     
         if (canvas) {
+            const backend_url = "http://localhost:8900"
             const response = await axios({
                 method: 'post',
-                url: `${import.meta.env.backend_url}/calculate`,
+                url: `${backend_url}/calculate`,
                 data: {
                     image: canvas.toDataURL('image/png'),
                     dict_of_vars: dictOfVars
