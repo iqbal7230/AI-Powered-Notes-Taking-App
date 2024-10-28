@@ -22,6 +22,6 @@ The project leverages modern, robust technologies to deliver a seamless experien
 - **Deep Context Insights**: Gives deeper meanings and explanations behind each mathematical depiction.
 
 ## 🚀 Usage
--**Draw or Type Equations**: Start by typing or drawing your math notes in the input area.
--**Get Solutions & Graphs**: View instant calculations and dynamically generated graphs.
--**Explore Abstract Insights**: Upload or create abstract drawings to reveal hidden mathematical meanings and context.
+- **Draw or Type Equations**: Start by typing or drawing your math notes in the input area.
+- **Get Solutions & Graphs**: View instant calculations and dynamically generated graphs.
+- **Explore Abstract Insights**: Upload or create abstract drawings to reveal hidden mathematical meanings and context.
