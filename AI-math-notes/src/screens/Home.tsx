@@ -3,12 +3,11 @@ import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import Draggable from 'react-draggable';
-import {SWATCHES} from '@/constants';
-// import {LazyBrush} from 'lazy-brush';
+import { SWATCHES } from '@/constants';
 
 interface GeneratedResult {
-    expression: string;
-    answer: string;
+    expression: string | number;
+    answer: string | number;
 }
 
 interface Response {
@@ -20,18 +19,13 @@ interface Response {
 export default function Home() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
+    const [isEraser, setIsEraser] = useState(false);
     const [color, setColor] = useState('rgb(255, 255, 255)');
     const [reset, setReset] = useState(false);
-    const [dictOfVars, setDictOfVars] = useState({});
-    const [result, setResult] = useState<GeneratedResult>();
+    const [dictOfVars, setDictOfVars] = useState<Record<string, string>>({});
+    const [result, setResult] = useState<GeneratedResult | null>(null);
     const [latexPosition, setLatexPosition] = useState({ x: 10, y: 200 });
     const [latexExpression, setLatexExpression] = useState<Array<string>>([]);
-
-    // const lazyBrush = new LazyBrush({
-    //     radius: 10,
-    //     enabled: true,
-    //     initialPoint: { x: 0, y: 0 },
-    // });
 
     useEffect(() => {
         if (latexExpression.length > 0 && window.MathJax) {
@@ -51,11 +45,31 @@ export default function Home() {
         if (reset) {
             resetCanvas();
             setLatexExpression([]);
-            setResult(undefined);
+            setResult(null);
             setDictOfVars({});
             setReset(false);
         }
     }, [reset]);
+
+    const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+        const gridSize = 20;
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 0.5;
+
+        for (let x = 0; x <= canvas.width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+
+        for (let y = 0; y <= canvas.height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+    };
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -67,9 +81,12 @@ export default function Home() {
                 canvas.height = window.innerHeight - canvas.offsetTop;
                 ctx.lineCap = 'round';
                 ctx.lineWidth = 3;
+                
+                canvas.style.background = 'black';
+                drawGrid(ctx, canvas);
             }
-
         }
+
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML';
         script.async = true;
@@ -82,25 +99,63 @@ export default function Home() {
         };
 
         return () => {
-            document.head.removeChild(script);
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
         };
-
     }, []);
 
-    const renderLatexToCanvas = (expression: string, answer: string) => {
-        const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
-        setLatexExpression([...latexExpression, latex]);
+    const formatExpression = (expression: string | number): string => {
+        const expressionStr = String(expression);
+        
+        // First, add spaces between words using a more sophisticated regex
+        let formatted = expressionStr
+            // Add space between lowercase and uppercase letters (camelCase)
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            // Add space between numbers and letters
+            .replace(/([0-9])([a-zA-Z])/g, '$1 $2')
+            .replace(/([a-zA-Z])([0-9])/g, '$1 $2')
+            // Add spaces around operators
+            .replace(/([+\-*/=])/g, ' $1 ')
+            // Replace multiple spaces with single space
+            .replace(/\s+/g, ' ')
+            .trim();
+        
+        // Format specific cases
+        formatted = formatted
+            // Fix function names with parentheses
+            .replace(/(\w+)\s*\(/g, '$1(')
+            // Format commas in function arguments
+            .replace(/\s*,\s*/g, ', ')
+            // Remove spaces after opening parenthesis
+            .replace(/\(\s+/g, '(')
+            // Remove spaces before closing parenthesis
+            .replace(/\s+\)/g, ')')
+            // Ensure equals sign has spaces
+            .replace(/\s*=\s*/g, ' = ');
+        
+        return formatted;
+    };
 
-        // Clear the main canvas
+    const renderLatexToCanvas = (expression: string | number | null | undefined, answer: string | number | null | undefined) => {
+        if (expression === null || expression === undefined || answer === null || answer === undefined) {
+            return;
+        }
+
+        const formattedExpression = formatExpression(expression);
+        const formattedAnswer = formatExpression(answer);
+        const latex = `\\(\\LARGE{${formattedExpression} = ${formattedAnswer}}\\)`;
+        setLatexExpression(prev => [...prev, latex]);
+
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawGrid(ctx, canvas);
             }
         }
     };
-
 
     const resetCanvas = () => {
         const canvas = canvasRef.current;
@@ -108,6 +163,7 @@ export default function Home() {
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawGrid(ctx, canvas);
             }
         }
     };
@@ -115,7 +171,6 @@ export default function Home() {
     const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (canvas) {
-            canvas.style.background = 'black';
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.beginPath();
@@ -124,83 +179,100 @@ export default function Home() {
             }
         }
     };
+
     const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!isDrawing) {
-            return;
-        }
+        if (!isDrawing) return;
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.strokeStyle = color;
+                if (isEraser) {
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 20;
+                } else {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                }
                 ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
                 ctx.stroke();
             }
         }
     };
+
     const stopDrawing = () => {
         setIsDrawing(false);
     };  
 
     const runRoute = async () => {
-        const canvas = canvasRef.current;
-    
-        if (canvas) {
-            const backend_url = "http://localhost:8900"
-            const response = await axios({
-                method: 'post',
-                url: `${backend_url}/calculate`,
-                data: {
-                    image: canvas.toDataURL('image/png'),
-                    dict_of_vars: dictOfVars
-                }
-            });
-
-            const resp = await response.data;
-            console.log('Response', resp);
-            resp.data.forEach((data: Response) => {
-                if (data.assign === true) {
-                    // dict_of_vars[resp.result] = resp.answer;
-                    setDictOfVars({
-                        ...dictOfVars,
-                        [data.expr]: data.result
-                    });
-                }
-            });
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx!.getImageData(0, 0, canvas.width, canvas.height);
-            let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-
-            for (let y = 0; y < canvas.height; y++) {
-                for (let x = 0; x < canvas.width; x++) {
-                    const i = (y * canvas.width + x) * 4;
-                    if (imageData.data[i + 3] > 0) {  // If pixel is not transparent
-                        minX = Math.min(minX, x);
-                        minY = Math.min(minY, y);
-                        maxX = Math.max(maxX, x);
-                        maxY = Math.max(maxY, y);
+        try {
+            const canvas = canvasRef.current;
+        
+            if (canvas) {
+                const backend_url = "http://localhost:8900";
+                const response = await axios({
+                    method: 'post',
+                    url: `${backend_url}/calculate`,
+                    data: {
+                        image: canvas.toDataURL('image/png'),
+                        dict_of_vars: dictOfVars
                     }
+                });
+
+                if (response.data && response.data.data) {
+                    const resp = response.data;
+                    console.log('Backend Response:', resp);
+
+                    resp.data.forEach((data: Response) => {
+                        if (data.assign === true) {
+                            setDictOfVars(prevVars => ({
+                                ...prevVars,
+                                [data.expr]: data.result
+                            }));
+                        }
+                    });
+
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+
+                        for (let y = 0; y < canvas.height; y++) {
+                            for (let x = 0; x < canvas.width; x++) {
+                                const i = (y * canvas.width + x) * 4;
+                                if (imageData.data[i + 3] > 0) {
+                                    minX = Math.min(minX, x);
+                                    minY = Math.min(minY, y);
+                                    maxX = Math.max(maxX, x);
+                                    maxY = Math.max(maxY, y);
+                                }
+                            }
+                        }
+
+                        const centerX = (minX + maxX) / 2;
+                        const centerY = (minY + maxY) / 2;
+                        setLatexPosition({ x: centerX, y: centerY });
+
+                        resp.data.forEach((data: Response) => {
+                            if (data.expr && data.result) {
+                                setResult({
+                                    expression: data.expr,
+                                    answer: data.result
+                                });
+                            }
+                        });
+                    }
+                } else {
+                    console.error('Invalid response format:', response);
                 }
             }
-
-            const centerX = (minX + maxX) / 2;
-            const centerY = (minY + maxY) / 2;
-
-            setLatexPosition({ x: centerX, y: centerY });
-            resp.data.forEach((data: Response) => {
-                setTimeout(() => {
-                    setResult({
-                        expression: data.expr,
-                        answer: data.result
-                    });
-                }, 1000);
-            });
+        } catch (error) {
+            console.error('Error in runRoute:', error);
         }
     };
 
     return (
         <>
-            <div className='grid grid-cols-3 gap-2'>
+            <div className='grid grid-cols-4 gap-2'>
                 <Button
                     onClick={() => setReset(true)}
                     className='z-20 bg-black text-white'
@@ -209,9 +281,23 @@ export default function Home() {
                 >
                     Reset
                 </Button>
+                <Button
+                    onClick={() => setIsEraser(!isEraser)}
+                    className={`z-20 ${isEraser ? 'bg-red-500' : 'bg-black'} text-white`}
+                    variant='default'
+                >
+                    {isEraser ? 'Drawing' : 'Eraser'}
+                </Button>
                 <Group className='z-20'>
                     {SWATCHES.map((swatch) => (
-                        <ColorSwatch key={swatch} color={swatch} onClick={() => setColor(swatch)} />
+                        <ColorSwatch 
+                            key={swatch} 
+                            color={swatch} 
+                            onClick={() => {
+                                setColor(swatch);
+                                setIsEraser(false);
+                            }} 
+                        />
                     ))}
                 </Group>
                 <Button
@@ -223,6 +309,7 @@ export default function Home() {
                     Run
                 </Button>
             </div>
+
             <canvas
                 ref={canvasRef}
                 id='canvas'
